@@ -564,26 +564,25 @@ with st.sidebar:
 
     if st.button("Reset Index", type="secondary"):
         try:
-            # close any open chroma client if you stored one
-            if "chroma_client" in st.session_state and st.session_state["chroma_client"] is not None:
-                try:
-                    st.session_state["chroma_client"] = None
-                except Exception:
-                    pass
+            # 1. Clear the session states first
+            st.session_state.local_chunks = []
+            st.session_state.audit_log = []
+            st.session_state.last_retrieved = []
+            st.session_state.last_question = ""
+            st.session_state.last_answer = ""
+            st.session_state.last_n_unique = 0
 
+            # 2. Force the Chroma client to shut down
+            if "chroma_client" in st.session_state:
+                st.session_state["chroma_client"] = None
+            
+            # 3. Use the force-delete helper you already have
             _rmtree_force(CHROMA_DIR)
+            
+            st.success("Reset complete. The 'Brain' is now empty.")
+            st.rerun() # Refresh the app to finalize the reset
         except Exception as e:
-            st.error(f"Could not reset index (DB is locked). Close the app and delete '{CHROMA_DIR}' manually. Error: {e}")
-            st.stop()
-
-        st.session_state.local_chunks = []
-        st.session_state.audit_log = []
-        st.session_state.last_retrieved = []
-        st.session_state.last_question = ""
-        st.session_state.last_confidence = "Low"
-        st.session_state.last_answer = ""
-        st.session_state.last_n_unique = 0
-        st.success("Reset complete.")
+            st.error(f"Reset failed: {e}. Please Reboot the app via the 3-dots menu.")
 
     
 
@@ -612,7 +611,7 @@ with chat_col:
         st.session_state["q"] = "Who owns the ideas I come up with at work?"
     if r2_s3.button("Political Hats (Out of Scope)"):
         st.session_state["q"] = "What is the company policy on wearing political hats?"
-        
+
     question = st.text_input("Ask a question:", key="q", placeholder="Type an HR policy question…")
     ask = st.button("Get Answer", type="primary")
 
