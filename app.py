@@ -517,7 +517,15 @@ st.info(
     "Answers are generated **only from retrieved policy documents**.  \n"
     "If confidence is Medium or Low, escalate before taking action."
 )
-
+# Project Documentation Button
+with open("HR_DSS_Full_Guide.pdf", "rb") as f:
+    st.download_button(
+        label="📄 View Full Project Guide & Architecture",
+        data=f,
+        file_name="HR_DSS_Full_Guide.pdf",
+        mime="application/pdf",
+        type="primary"
+    )
 # Session state
 if "audit_log" not in st.session_state:
     st.session_state.audit_log = []
