@@ -563,28 +563,28 @@ with st.sidebar:
     st.divider()
 
     if st.button("Reset Index", type="secondary"):
-    try:
-        # Clear session state
-        st.session_state.local_chunks = []
-        st.session_state.audit_log = []
-        st.session_state.last_retrieved = []
-        st.session_state.last_question = ""
-        st.session_state.last_answer = ""
-        st.session_state.last_n_unique = 0
-
-        # Clear Chroma collection without deleting files (avoids WinError 32)
-        client = chromadb.PersistentClient(path=CHROMA_DIR)
         try:
-            client.delete_collection(name=COLLECTION_NAME)
-        except Exception:
-            pass  # collection may not exist yet
+            # Clear session state
+            st.session_state.local_chunks = []
+            st.session_state.audit_log = []
+            st.session_state.last_retrieved = []
+            st.session_state.last_question = ""
+            st.session_state.last_answer = ""
+            st.session_state.last_n_unique = 0
 
-        st.success("Reset complete. The index has been cleared.")
-        time.sleep(0.5)
-        st.rerun()
+            # Clear Chroma collection without deleting files (avoids WinError 32)
+            client = chromadb.PersistentClient(path=CHROMA_DIR)
+            try:
+                client.delete_collection(name=COLLECTION_NAME)
+            except Exception:
+                pass  # collection may not exist yet
 
-    except Exception as e:
-        st.error(f"Reset failed: {e}. Use 'Reboot App' as a fallback.")
+            st.success("Reset complete. The index has been cleared.")
+            time.sleep(0.5)
+            st.rerun()
+
+        except Exception as e:
+            st.error(f"Reset failed: {e}. Use 'Reboot App' as a fallback.")
 
 
     
