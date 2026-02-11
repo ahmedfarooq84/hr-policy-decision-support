@@ -33,7 +33,7 @@ CHUNK_OVERLAP = 120
 # ---- Retrieval gate ----
 # Chroma returns cosine distances (lower is better). Similarity ~= (1 - distance).
 # If results are below this similarity threshold, treat as 'no retrieval'.
-SIMILARITY_THRESHOLD = 0.28
+SIMILARITY_THRESHOLD = 0.18
 
 
 @dataclass
@@ -153,7 +153,7 @@ def embed_openai(texts: List[str]) -> List[List[float]]:
     return [d.embedding for d in resp.data]
 
 
-def semantic_search(query: str, k: int = 15) -> List[Chunk]:
+def semantic_search(query: str, k: int = 20) -> List[Chunk]:
     if not api_available():
         return []
 
