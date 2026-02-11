@@ -247,6 +247,11 @@ def risk_banner(n_unique: int):
 
 
 def index_pdf(file_name: str, file_bytes: bytes) -> int:
+    # Clear old results to force a fresh search when a new file arrives
+    if "last_retrieved" in st.session_state:
+        st.session_state.last_retrieved = []
+    if "last_answer" in st.session_state:
+        st.session_state.last_answer = ""
     """Parse PDF → chunk → store in Chroma (semantic) AND session_state (keyword fallback)."""
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
         tmp.write(file_bytes)
