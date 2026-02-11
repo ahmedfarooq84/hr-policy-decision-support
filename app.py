@@ -563,29 +563,29 @@ with st.sidebar:
     st.divider()
 
     if st.button("Reset Index", type="secondary"):
-        try:
-            # 1. Clear session states and answer cache immediately
-            st.session_state.local_chunks = []
-            st.session_state.audit_log = []
-            st.session_state.last_retrieved = []
-            st.session_state.last_question = ""
-            st.session_state.last_answer = ""
-            st.session_state.last_n_unique = 0
+    try:
+        # Clear session state
+        st.session_state.local_chunks = []
+        st.session_state.audit_log = []
+        st.session_state.last_retrieved = []
+        st.session_state.last_question = ""
+        st.session_state.last_answer = ""
+        st.session_state.last_n_unique = 0
 
-            # 2. Release the File Lock
-            # This is the "Magic Fix" that prevents the InternalError
-            if "chroma_client" in st.session_state:
-                st.session_state["chroma_client"] = None
-            
-            # 3. Wipe the database folder using your force-delete helper
-            _rmtree_force(CHROMA_DIR)
-            
-            st.success("Reset complete. The database has been cleared.")
-            # Give the server a moment to settle before the app re-runs
-            time.sleep(1.5)
-            st.rerun() 
-        except Exception as e:
-            st.error(f"Reset failed: {e}. Please use 'Reboot App' in the Streamlit menu.")
+        # Clear Chroma collection without deleting files (avoids WinError 32)
+        client = chromadb.PersistentClient(path=CHROMA_DIR)
+        try:
+            client.delete_collection(name=COLLECTION_NAME)
+        except Exception:
+            pass  # collection may not exist yet
+
+        st.success("Reset complete. The index has been cleared.")
+        time.sleep(0.5)
+        st.rerun()
+
+    except Exception as e:
+        st.error(f"Reset failed: {e}. Use 'Reboot App' as a fallback.")
+
 
     
 
