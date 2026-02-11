@@ -1,0 +1,6 @@
+[theme]
+primaryColor = "#00C4CC"        # Cyan (matches Lovable)
+backgroundColor = "#0E1117"     # Deep Navy
+secondaryBackgroundColor = "#1E232D"
+textColor = "#F0F0F0"
+font = "sans serif"
