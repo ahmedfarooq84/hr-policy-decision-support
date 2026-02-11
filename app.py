@@ -153,7 +153,7 @@ def embed_openai(texts: List[str]) -> List[List[float]]:
     return [d.embedding for d in resp.data]
 
 
-def semantic_search(query: str, k: int = 20) -> List[Chunk]:
+def semantic_search(query: str, k: int = 15) -> List[Chunk]:
     if not api_available():
         return []
 
