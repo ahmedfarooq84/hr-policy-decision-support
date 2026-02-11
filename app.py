@@ -33,7 +33,7 @@ CHUNK_OVERLAP = 120
 # ---- Retrieval gate ----
 # Chroma returns cosine distances (lower is better). Similarity ~= (1 - distance).
 # If results are below this similarity threshold, treat as 'no retrieval'.
-SIMILARITY_THRESHOLD = 0.18
+SIMILARITY_THRESHOLD = 0.15
 
 
 @dataclass
@@ -247,6 +247,10 @@ def risk_banner(n_unique: int):
 
 
 def index_pdf(file_name: str, file_bytes: bytes) -> int:
+    # Clear the old "No policy found" state instantly
+    st.session_state.last_retrieved = []
+    st.session_state.last_answer = ""
+    st.session_state.last_n_unique = 0
     # Clear old results to force a fresh search when a new file arrives
     if "last_retrieved" in st.session_state:
         st.session_state.last_retrieved = []
