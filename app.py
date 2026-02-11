@@ -9,7 +9,9 @@ from pypdf import PdfReader
 import chromadb
 import pandas as pd
 import numpy as np
-
+import time
+import shutil
+import stat
 # PDF generation for escalation memo
 from fpdf import FPDF
 from datetime import datetime
@@ -28,6 +30,11 @@ COLLECTION_NAME = "hr_policies"
 CHUNK_SIZE = 900
 CHUNK_OVERLAP = 120
 
+# ---- Retrieval gate ----
+# Chroma returns cosine distances (lower is better). Similarity ~= (1 - distance).
+# If results are below this similarity threshold, treat as 'no retrieval'.
+SIMILARITY_THRESHOLD = 0.28
+
 
 @dataclass
 class Chunk:
@@ -37,6 +44,57 @@ class Chunk:
 
 
 # ---------------- API / RAG Helpers ----------------
+# --- AUTO-LOADER FOR DEMO (Add this after imports) ---
+def load_demo_data():
+    """Forces the demo files to load if the DB is empty."""
+    
+    # 1. Define your exact file names
+    demo_files = [
+        "Extended_Remote_Work_and_International_Assignment_Policy.pdf",
+        "Extended_Code_of_Conduct_and_Termination_Guidelines.pdf",
+        "Extended_Policy_Gaps_and_Legal_Escalation_Guidelines.pdf"
+    ]
+    
+    # 2. Check if we already have data. If yes, stop.
+    if "local_chunks" in st.session_state and len(st.session_state.local_chunks) > 0:
+        return
+
+    # 3. If no data, load the files automatically!
+    total_chunks = 0
+    st.toast("⚙️ Auto-loading Demo Policies... Please wait.")
+    
+    for fname in demo_files:
+        if os.path.exists(fname):
+            with open(fname, "rb") as f:
+                # We reuse your existing index_pdf function
+                file_bytes = f.read()
+                # Determine mode (Semantic or Keyword) based on API key presence
+                # Note: index_pdf uses st.session_state internally
+                index_pdf(fname, file_bytes)
+                total_chunks += 1
+    
+    if total_chunks > 0:
+        st.toast(f"✅ Ready! Loaded {len(demo_files)} demo policies.")
+
+def _rmtree_force(path: str, retries: int = 6, delay: float = 0.4):
+    def onerror(func, p, exc_info):
+        try:
+            os.chmod(p, stat.S_IWRITE)
+            func(p)
+        except Exception:
+            pass
+
+    for i in range(retries):
+        try:
+            if os.path.exists(path):
+                shutil.rmtree(path, onerror=onerror)
+            return
+        except PermissionError:
+            time.sleep(delay)
+    # last try (raise if still locked)
+    if os.path.exists(path):
+        shutil.rmtree(path, onerror=onerror)
+
 def get_api_key() -> str:
     """Safely read OPENAI_API_KEY from sidebar override, Streamlit secrets, or environment."""
     override = (st.session_state.get("api_key_override", "") or "").strip()
@@ -95,7 +153,7 @@ def embed_openai(texts: List[str]) -> List[List[float]]:
     return [d.embedding for d in resp.data]
 
 
-def semantic_search(query: str, k: int = 5) -> List[Chunk]:
+def semantic_search(query: str, k: int = 15) -> List[Chunk]:
     if not api_available():
         return []
 
@@ -104,13 +162,24 @@ def semantic_search(query: str, k: int = 5) -> List[Chunk]:
     res = collection.query(
         query_embeddings=[q_emb],
         n_results=k,
-        include=["documents", "metadatas"],
+        include=["documents", "metadatas", "distances"],
     )
 
     out: List[Chunk] = []
-    docs = res["documents"][0]
-    metas = res["metadatas"][0]
-    for d, m in zip(docs, metas):
+    docs = (res.get("documents", [[]])[0] or [])
+    metas = (res.get("metadatas", [[]])[0] or [])
+    dists = (res.get("distances", [[]])[0] or [])
+
+    # ---- Threshold filter: if similarity is too low, treat as "no retrieval" ----
+    for d, m, dist in zip(docs, metas, dists):
+        try:
+            similarity = 1.0 - float(dist)
+        except Exception:
+            similarity = 0.0
+
+        if similarity < SIMILARITY_THRESHOLD:
+            continue
+
         out.append(Chunk(text=d, source=m.get("source", "Unknown"), page=int(m.get("page", 0))))
     return out
 
@@ -145,49 +214,40 @@ def unique_source_pages(retrieved: List[Chunk]) -> List[Tuple[str, int]]:
 
 
 # ---------------- Confidence (CONSISTENT) ----------------
+# ---------------- Confidence (DEMO TUNED) ----------------
 def confidence_from_unique_sources(n_unique: int) -> str:
-    if n_unique >= 4:
+    if n_unique >= 2:  # Lowered from 4 to 2 matches your 2-page PDFs
         return "High"
-    if n_unique >= 2:
+    if n_unique == 1:
         return "Medium"
     return "Low"
 
-
 def confidence_badge(n_unique: int) -> str:
-    if n_unique >= 4:
-        return "🟢 High (multiple sources retrieved)"
     if n_unique >= 2:
-        return "🟡 Medium (limited sources retrieved)"
+        return "🟢 High (multiple policy citations)"
     if n_unique == 1:
-        return "🟠 Low (single source retrieved)"
-    return "🔴 Low (no sources retrieved)"
+        return "🟡 Medium (limited policy citations)"
+    return "🔴 Low (no policy citations)"
 
 
 def confidence_meter(n_unique: int) -> Tuple[float, str]:
-    if n_unique >= 4:
+    if n_unique >= 2:
         return 0.90, "High"
-    if n_unique == 3:
-        return 0.75, "Medium"
-    if n_unique == 2:
-        return 0.60, "Medium"
     if n_unique == 1:
-        return 0.30, "Low"
+        return 0.50, "Medium"
     return 0.05, "Low"
 
-
 def risk_banner(n_unique: int):
-    if n_unique >= 4:
-        st.success("✅ High confidence: multiple policy sections retrieved. Answer is grounded in sources.")
-    elif n_unique >= 2:
-        st.warning("⚠️ Medium confidence: limited policy context. Please verify with HR or policy owner.")
+    if n_unique >= 2:
+        st.success("✅ High confidence: Policy is clear and grounded.")
     elif n_unique == 1:
-        st.error("🚫 Low confidence: only one policy section retrieved. Human review recommended before action.")
+        st.warning("⚠️ Medium confidence: Only one source found. Review recommended.")
     else:
-        st.error("⛔ Insufficient policy context: no relevant clauses found. Upload/choose the right policy documents.")
+        st.error("🚫 Low confidence: No relevant policy found. Escalation required.")
 
 
 def index_pdf(file_name: str, file_bytes: bytes) -> int:
-    """Parse PDF → chunk → store in Chroma (semantic) OR session_state (keyword-only)."""
+    """Parse PDF → chunk → store in Chroma (semantic) AND session_state (keyword fallback)."""
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
         tmp.write(file_bytes)
         tmp_path = tmp.name
@@ -204,6 +264,9 @@ def index_pdf(file_name: str, file_bytes: bytes) -> int:
         for piece in chunk_text(text, CHUNK_SIZE, CHUNK_OVERLAP):
             chunks.append(Chunk(text=piece, source=file_name, page=i + 1))
 
+    # ✅ ALWAYS keep local chunks for keyword fallback (industry standard)
+    st.session_state["local_chunks"] = st.session_state.get("local_chunks", []) + chunks
+
     docs = [c.text for c in chunks]
     metas = [{"source": c.source, "page": c.page} for c in chunks]
     ids = [str(uuid.uuid4()) for _ in chunks]
@@ -215,10 +278,10 @@ def index_pdf(file_name: str, file_bytes: bytes) -> int:
         st.success(f"Indexed {len(chunks)} chunks (semantic embeddings enabled).")
     else:
         st.warning("No API key detected. Running in Retrieval-Only mode (keyword search).")
-        st.session_state["local_chunks"] = st.session_state.get("local_chunks", []) + chunks
         st.success(f"Indexed {len(chunks)} chunks (local keyword index).")
 
     return len(chunks)
+
 
 
 def build_prompt(question: str, retrieved: List[Chunk]) -> str:
@@ -488,21 +551,22 @@ with st.sidebar:
 
     st.divider()
 
-    st.subheader("Quick Scenarios")
-    if st.button("Remote work cross-border"):
-        st.session_state["q"] = "Can an employee work remotely from another country for 3 months? What conditions apply?"
-    if st.button("Leave eligibility"):
-        st.session_state["q"] = "What is the eligibility and approval process for extended leave?"
-    if st.button("Conduct / termination risk"):
-        st.session_state["q"] = "What does the policy say about termination for repeated conduct violations?"
-
     st.divider()
 
     if st.button("Reset Index", type="secondary"):
-        import shutil
+        try:
+            # close any open chroma client if you stored one
+            if "chroma_client" in st.session_state and st.session_state["chroma_client"] is not None:
+                try:
+                    st.session_state["chroma_client"] = None
+                except Exception:
+                    pass
 
-        if os.path.exists(CHROMA_DIR):
-            shutil.rmtree(CHROMA_DIR)
+            _rmtree_force(CHROMA_DIR)
+        except Exception as e:
+            st.error(f"Could not reset index (DB is locked). Close the app and delete '{CHROMA_DIR}' manually. Error: {e}")
+            st.stop()
+
         st.session_state.local_chunks = []
         st.session_state.audit_log = []
         st.session_state.last_retrieved = []
@@ -512,19 +576,36 @@ with st.sidebar:
         st.session_state.last_n_unique = 0
         st.success("Reset complete.")
 
+    
+
 
 # ---------------- Main Area ----------------
+load_demo_data()
 chat_col, dash_col = st.columns([1.25, 0.95], gap="large")
 
 with chat_col:
     st.subheader("Policy Chat (Grounded)")
 
+    st.markdown("#### Demo Scenarios")
+    s1, s2, s3 = st.columns(3)
+    if s1.button("Remote Work Policy"):
+        st.session_state["q"] = "What is our policy on remote work from another Country?"
+    if s2.button("Termination due to Conduct"):
+        st.session_state["q"] = "What is the process for termination due to conduct?"
+    if s3.button("Pet Iguana (Out of Scope)"):
+        st.session_state["q"] = "Can I bring my pet iguana to the office?"
+
     question = st.text_input("Ask a question:", key="q", placeholder="Type an HR policy question…")
     ask = st.button("Get Answer", type="primary")
 
     if ask and question.strip():
-        retrieved = semantic_search(question, k=5)
-        if not retrieved:
+        if not api_available():
+             st.caption("🔎 Retrieval mode: Keyword fallback (no valid OpenAI key detected).")
+        else:
+             st.caption("🔎 Retrieval mode: Semantic + Keyword fallback.")
+        # 1. Try Smart Vector Search first     
+        retrieved = semantic_search(question, k=15)
+        if not retrieved and not api_available():
             retrieved = keyword_search(question, st.session_state.local_chunks, k=5)
 
         st.session_state.last_retrieved = retrieved
@@ -594,7 +675,8 @@ with chat_col:
     st.divider()
     st.subheader("Escalation")
 
-    can_escalate = bool(st.session_state.get("last_question")) and bool(st.session_state.get("last_retrieved"))
+    # ENABLE button even if no sources found (Critical for Red Light scenarios)
+    can_escalate = bool(st.session_state.get("last_question"))
     if st.button("Escalate to Legal", disabled=not can_escalate):
         q = st.session_state.get("last_question", "").strip()
         conf_label = st.session_state.get("last_confidence", "Low")
