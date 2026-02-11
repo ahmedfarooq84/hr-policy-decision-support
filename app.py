@@ -564,7 +564,7 @@ with st.sidebar:
 
     if st.button("Reset Index", type="secondary"):
         try:
-            # 1. Clear the session states and local chunks immediately
+            # 1. Clear session data
             st.session_state.local_chunks = []
             st.session_state.audit_log = []
             st.session_state.last_retrieved = []
@@ -572,16 +572,17 @@ with st.sidebar:
             st.session_state.last_answer = ""
             st.session_state.last_n_unique = 0
 
-            # 2. Crucial: Clear the Chroma client from memory to release the file lock
+            # 2. CRITICAL: Clear the Chroma client from the session to release the folder lock
+            # If your app creates the client elsewhere, ensure it is set to None here
             if "chroma_client" in st.session_state:
                 st.session_state["chroma_client"] = None
             
-            # 3. Use your force-delete helper (now safe since client is released)
+            # 3. Force the deletion of the directory
             _rmtree_force(CHROMA_DIR)
             
-            st.success("Reset complete. The database has been cleared.")
+            st.success("Reset complete. The 'Brain' is now empty.")
             time.sleep(1)
-            st.rerun() # Refresh the app to start fresh
+            st.rerun() 
         except Exception as e:
             st.error(f"Reset failed: {e}. Please use 'Reboot App' in the Streamlit menu.")
 
