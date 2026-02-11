@@ -1,0 +1,7 @@
+streamlit
+openai
+chromadb
+pypdf
+pandas
+numpy
+fpdf2
