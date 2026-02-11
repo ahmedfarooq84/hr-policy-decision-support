@@ -604,6 +604,15 @@ with chat_col:
     if s3.button("Pet Iguana (Out of Scope)"):
         st.session_state["q"] = "Can I bring my pet iguana to the office?"
 
+# Row 2: New Standby Policy Scenarios
+    r2_s1, r2_s2, r2_s3 = st.columns(3)
+    if r2_s1.button("International Business Class"):
+        st.session_state["q"] = "What is the policy for booking international business class flights?"
+    if r2_s2.button("Ownership of Ideas"):
+        st.session_state["q"] = "Who owns the ideas I come up with at work?"
+    if r2_s3.button("Political Hats (Out of Scope)"):
+        st.session_state["q"] = "What is the company policy on wearing political hats?"
+        
     question = st.text_input("Ask a question:", key="q", placeholder="Type an HR policy question…")
     ask = st.button("Get Answer", type="primary")
 
