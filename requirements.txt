@@ -1,7 +1,8 @@
 streamlit
 openai
-chromadb
+chromadb==0.4.24
 pypdf
 pandas
 numpy
 fpdf2
+protobuf>=3.20,<4
