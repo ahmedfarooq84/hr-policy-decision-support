@@ -370,10 +370,11 @@ def make_synthetic_workforce_data(n=600, seed=42) -> pd.DataFrame:
 def make_attrition_trend(df: pd.DataFrame, months=12, seed=7) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
     baseline_rate = float(df["attrited"].mean())
-    noise = rng.normal(0, 0.003, size=months)
-    season = 0.004 * np.sin(np.linspace(0, 2 * np.pi, months))
-    rates = np.clip(baseline_rate + noise + season, 0.01, 0.15)
     idx = pd.date_range(end=pd.Timestamp.today().normalize(), periods=months, freq="MS")
+    n = len(idx)  # use actual length, not assumed 'months'
+    noise = rng.normal(0, 0.003, size=n)
+    season = 0.004 * np.sin(np.linspace(0, 2 * np.pi, n))
+    rates = np.clip(baseline_rate + noise + season, 0.01, 0.15)
     return pd.DataFrame({"month": idx, "attrition_rate": rates})
 
 
